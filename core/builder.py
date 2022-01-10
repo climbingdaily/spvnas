@@ -18,6 +18,7 @@ def make_dataset() -> Dataset:
         dataset = SemanticKITTI(root=configs.dataset.root,
                                 num_points=configs.dataset.num_points,
                                 voxel_size=configs.dataset.voxel_size)
+        configs.data.num_classes = dataset['train'].num_classes
     else:
         raise NotImplementedError(configs.dataset.name)
     return dataset

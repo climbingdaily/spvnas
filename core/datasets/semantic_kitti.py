@@ -5,7 +5,7 @@ import numpy as np
 from torchsparse import SparseTensor
 from torchsparse.utils.collate import sparse_collate_fn
 from torchsparse.utils.quantize import sparse_quantize
-
+from .semantic_poss import LABEL_DICT, KEPT_LABELS
 __all__ = ['SemanticKITTI']
 
 label_name_mapping = {
@@ -62,14 +62,14 @@ class SemanticKITTI(dict):
         if submit_to_server:
             super().__init__({
                 'train':
-                    SemanticKITTIInternal(root,
+                    SemanticPOSSInternal(root,
                                           voxel_size,
                                           num_points,
                                           sample_stride=1,
                                           split='train',
                                           submit=True),
                 'test':
-                    SemanticKITTIInternal(root,
+                    SemanticPOSSInternal(root,
                                           voxel_size,
                                           num_points,
                                           sample_stride=1,
@@ -284,24 +284,20 @@ class SemanticPOSSInternal:
         reverse_label_name_mapping = {}
         self.label_map = np.zeros(260)
         cnt = 0
-        for label_id in label_name_mapping:
-            if label_id > 250:
-                if label_name_mapping[label_id].replace('moving-',
-                                                        '') in kept_labels:
-                    self.label_map[label_id] = reverse_label_name_mapping[
-                        label_name_mapping[label_id].replace('moving-', '')]
-                else:
-                    self.label_map[label_id] = 255
-            elif label_id == 0:
-                self.label_map[label_id] = 255
+        unlabel_id = 0
+        for label_id in LABEL_DICT:
+            if label_id == 0:
+                self.label_map[label_id] = unlabel_id
+            elif label_id == 4 or label_id == 5:
+                self.label_map[label_id] = 1
+                reverse_label_name_mapping['pedestrian'] = 1
+                cnt = 2
+            elif LABEL_DICT[label_id] in KEPT_LABELS:
+                self.label_map[label_id] = cnt
+                reverse_label_name_mapping[LABEL_DICT[label_id]] = cnt
+                cnt += 1
             else:
-                if label_name_mapping[label_id] in kept_labels:
-                    self.label_map[label_id] = cnt
-                    reverse_label_name_mapping[
-                        label_name_mapping[label_id]] = cnt
-                    cnt += 1
-                else:
-                    self.label_map[label_id] = 255
+                self.label_map[label_id] = unlabel_id
 
         self.reverse_label_name_mapping = reverse_label_name_mapping
         self.num_classes = cnt
@@ -339,13 +335,13 @@ class SemanticPOSSInternal:
         pc_ = np.round(block[:, :3] / self.voxel_size).astype(np.int32)
         pc_ -= pc_.min(0, keepdims=1)
 
-        label_file = self.files[index].replace('velodyne', 'labels').replace(
-            '.bin', '.label')
+        label_file = self.files[index].replace(
+            'velodyne', 'labels').replace('.bin', '.label')
         if os.path.exists(label_file):
             with open(label_file, 'rb') as a:
-                all_labels = np.fromfile(a, dtype=np.int32).reshape(-1)
+                all_labels = np.fromfile(a, dtype=np.uint32).reshape(-1)
         else:
-            all_labels = np.zeros(pc_.shape[0]).astype(np.int32)
+            all_labels = np.zeros(pc_.shape[0]).astype(np.uint32)
 
         labels_ = self.label_map[all_labels & 0xFFFF].astype(np.int64)
 

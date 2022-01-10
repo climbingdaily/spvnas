@@ -39,9 +39,6 @@ def main() -> None:
     else:
         set_run_dir(args.run_dir)
 
-    logger.info(' '.join([sys.executable] + sys.argv))
-    logger.info(f'Experiment started: "{args.run_dir}".' + '\n' + f'{configs}')
-
     # seed
     if ('seed' not in configs.train) or (configs.train.seed is None):
         configs.train.seed = torch.initial_seed() % (2 ** 32 - 1)
@@ -54,6 +51,10 @@ def main() -> None:
     torch.cuda.manual_seed(seed)
 
     dataset = builder.make_dataset()
+    
+    logger.info(' '.join([sys.executable] + sys.argv))
+    logger.info(f'Experiment started: "{args.run_dir}".' + '\n' + f'{configs}')
+
     dataflow = {}
     for split in dataset:
         sampler = torch.utils.data.distributed.DistributedSampler(

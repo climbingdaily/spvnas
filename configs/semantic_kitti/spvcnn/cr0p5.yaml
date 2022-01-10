@@ -3,3 +3,9 @@ model:
   cr: 0.5
 dataset:
   root: /hdd/dyd/SemanticPOSS/sequences
+  num_points: 50000
+  voxel_size: 0.05
+data:
+  num_classes: 1
+batch_size: 2
+num_epochs: 50
