@@ -18,7 +18,6 @@ from core import builder
 from core.callbacks import MeanIoU
 from core.trainers import SemanticKITTITrainer
 
-
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument('config', metavar='FILE', help='config file')
@@ -70,12 +69,19 @@ def main() -> None:
             pin_memory=True,
             collate_fn=dataset[split].collate_fn)
 
+    def cal_weights():
+        sample_classes = np.zeros(configs.data.num_classes)
+        for feed_dict in dataflow['train']:
+            for i in range(configs.data.num_classes):
+                sample_classes[i] += torch.sum(feed_dict['targets'].F == i).item()
+
     model = builder.make_model().cuda()
     if configs.distributed:
         model = torch.nn.parallel.DistributedDataParallel(
             model, device_ids=[dist.local_rank()], find_unused_parameters=True)
 
-    criterion = builder.make_criterion()
+    wights_ce = torch.FloatTensor([1/58.25, 1]).cuda()
+    criterion = builder.make_criterion(wights_ce)
     optimizer = builder.make_optimizer(model)
     scheduler = builder.make_scheduler(optimizer)
 
@@ -90,16 +96,17 @@ def main() -> None:
         dataflow['train'],
         num_epochs=configs.num_epochs,
         callbacks=[
+            # ! _trigger_epoch
             InferenceRunner(
                 dataflow[split],
                 callbacks=[
-                    MeanIoU(name=f'iou/{split}',
+                    MeanIoU(name=f'{split}/iou',
                             num_classes=configs.data.num_classes,
                             ignore_label=configs.data.ignore_label)
                 ],
             ) for split in ['test']
         ] + [
-            MaxSaver('iou/test'),
+            MaxSaver('test/iou'),
             Saver(),
         ])
 

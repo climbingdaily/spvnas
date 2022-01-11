@@ -37,6 +37,36 @@ class SemanticKITTITrainer(Trainer):
         self.dataflow.worker_init_fn = lambda worker_id: np.random.seed(
             self.seed + (self.epoch_num - 1) * self.num_workers + worker_id)
 
+    def IoU(self, outputs, targets) -> None:
+        
+        num_classes = outputs.shape[-1]
+
+        outputs = outputs.argmax(1)
+        
+        total_seen = np.zeros(num_classes)        # TP + FN
+        total_correct = np.zeros(num_classes)     # TP
+        total_positive = np.zeros(num_classes)    # TP + FP
+
+        outputs = outputs[targets != 255]
+        targets = targets[targets != 255]
+
+        ious = []
+        for i in range(num_classes):
+            total_seen[i] = torch.sum(targets == i).item()    # TP + FN
+            total_correct[i] = torch.sum((targets == i) & (outputs == targets)).item() #TP
+            total_positive[i] = torch.sum(outputs == i).item()    # TP + FP
+            if total_seen[i] == 0:
+                ious.append(1)
+            else:
+                cur_iou = total_correct[i] / \
+                    (total_seen[i] + total_positive[i] - total_correct[i])
+                ious.append(cur_iou)
+            self.summary.add_scalar(f'T/iou-{i:d}', ious[i] * 100)
+
+        miou = np.mean(ious)        
+        self.summary.add_scalar('T/miou', miou * 100)
+        return ious, miou
+
     def _run_step(self, feed_dict: Dict[str, Any]) -> Dict[str, Any]:
         _inputs = {}
         for key, value in feed_dict.items():
@@ -54,6 +84,7 @@ class SemanticKITTITrainer(Trainer):
 
         if outputs.requires_grad:
             self.summary.add_scalar('loss', loss.item())
+            self.IoU(outputs, targets)
 
             self.optimizer.zero_grad()
             self.scaler.scale(loss).backward()

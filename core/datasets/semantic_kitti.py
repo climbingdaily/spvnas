@@ -288,6 +288,7 @@ class SemanticPOSSInternal:
         for label_id in LABEL_DICT:
             if label_id == 0:
                 self.label_map[label_id] = unlabel_id
+                reverse_label_name_mapping['unlabeled'] = 0
             elif label_id == 4 or label_id == 5:
                 self.label_map[label_id] = 1
                 reverse_label_name_mapping['pedestrian'] = 1
@@ -298,6 +299,7 @@ class SemanticPOSSInternal:
                 cnt += 1
             else:
                 self.label_map[label_id] = unlabel_id
+                reverse_label_name_mapping['unlabeled'] = 0
 
         self.reverse_label_name_mapping = reverse_label_name_mapping
         self.num_classes = cnt

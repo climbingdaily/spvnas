@@ -47,10 +47,10 @@ def make_model() -> nn.Module:
     return model
 
 
-def make_criterion() -> Callable:
+def make_criterion(weights_ce = None) -> Callable:
     if configs.criterion.name == 'cross_entropy':
         criterion = nn.CrossEntropyLoss(
-            ignore_index=configs.criterion.ignore_index)
+            weight=weights_ce, ignore_index=configs.criterion.ignore_index)
     else:
         raise NotImplementedError(configs.criterion.name)
     return criterion

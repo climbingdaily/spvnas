@@ -24,9 +24,9 @@ class MeanIoU(Callback):
         self.target_tensor = target_tensor
 
     def _before_epoch(self) -> None:
-        self.total_seen = np.zeros(self.num_classes)
-        self.total_correct = np.zeros(self.num_classes)
-        self.total_positive = np.zeros(self.num_classes)
+        self.total_seen = np.zeros(self.num_classes)        # TP + FN
+        self.total_correct = np.zeros(self.num_classes)     # TP
+        self.total_positive = np.zeros(self.num_classes)    # TP + FP
 
     def _after_step(self, output_dict: Dict[str, Any]) -> None:
         outputs = output_dict[self.output_tensor]
@@ -35,10 +35,10 @@ class MeanIoU(Callback):
         targets = targets[targets != self.ignore_label]
 
         for i in range(self.num_classes):
-            self.total_seen[i] += torch.sum(targets == i).item()
+            self.total_seen[i] += torch.sum(targets == i).item()    # TP + FN
             self.total_correct[i] += torch.sum((targets == i)
-                                               & (outputs == targets)).item()
-            self.total_positive[i] += torch.sum(outputs == i).item()
+                                               & (outputs == targets)).item() #TP
+            self.total_positive[i] += torch.sum(outputs == i).item()    # TP + FP
 
     def _after_epoch(self) -> None:
         for i in range(self.num_classes):
@@ -59,6 +59,7 @@ class MeanIoU(Callback):
                                                    + self.total_positive[i]
                                                    - self.total_correct[i])
                 ious.append(cur_iou)
+            self.trainer.summary.add_scalar(f'test/iou-{i:d}', cur_iou * 100)
 
         miou = np.mean(ious)
         if hasattr(self, 'trainer') and hasattr(self.trainer, 'summary'):
