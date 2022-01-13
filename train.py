@@ -76,12 +76,13 @@ def main() -> None:
                 sample_classes[i] += torch.sum(feed_dict['targets'].F == i).item()
 
     model = builder.make_model().cuda()
+    # model.load_state_dict()
     if configs.distributed:
         model = torch.nn.parallel.DistributedDataParallel(
             model, device_ids=[dist.local_rank()], find_unused_parameters=True)
 
     wights_ce = torch.FloatTensor([1/58.25, 1]).cuda()
-    criterion = builder.make_criterion(wights_ce)
+    criterion = builder.make_criterion()
     optimizer = builder.make_optimizer(model)
     scheduler = builder.make_scheduler(optimizer)
 

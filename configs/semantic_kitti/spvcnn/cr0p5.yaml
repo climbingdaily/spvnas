@@ -6,6 +6,6 @@ dataset:
   num_points: 50000
   voxel_size: 0.05
 data:
-  num_classes: 1
+  num_classes: 2
 batch_size: 16
-num_epochs: 50
+num_epochs: 100

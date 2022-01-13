@@ -25,14 +25,15 @@ LABEL_DICT = {
 
 KEPT_LABELS = [
     'pedestrian'
-    # , 'rider'
-    # , 'trunk', 'car', 'bike'
-    # , 'plants', 'ground'
+    , 'rider'
+    # , 'trunk'
+    , 'car', 'bike'
+    , 'plants', 'ground'
 ]
 
 SEM_COLOR = np.array([
     [0, 0, 0],                       # 0: "unlabeled"
-    [0, 0, 0], [0, 0, 0], [0, 0, 0], # don't care
+    [255, 30, 30], [0, 0, 0], [0, 0, 0], # don't care
     [255, 30, 30],                   # 4: "1 person"
     [255, 30, 30],                   # 5: "2+ person"
     [255, 40, 200],                  # 6: "rider"
