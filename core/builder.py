@@ -24,7 +24,7 @@ def make_dataset() -> Dataset:
     return dataset
 
 
-def make_model() -> nn.Module:
+def make_model(model_name = None) -> nn.Module:
     if configs.model.name == 'minkunet':
         from core.models.semantic_kitti import MinkUNet
         if 'cr' in configs.model:
@@ -42,6 +42,8 @@ def make_model() -> nn.Module:
                        cr=cr,
                        pres=configs.dataset.voxel_size,
                        vres=configs.dataset.voxel_size)
+        if model_name is not None:
+            model.load_state_dict(torch.load(model_name)['model'])
     else:
         raise NotImplementedError(configs.model.name)
     return model

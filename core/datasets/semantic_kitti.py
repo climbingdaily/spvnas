@@ -1,11 +1,13 @@
 import os
 import os.path
+from re import L
 
 import numpy as np
 from torchsparse import SparseTensor
 from torchsparse.utils.collate import sparse_collate_fn
 from torchsparse.utils.quantize import sparse_quantize
 from .semantic_poss import LABEL_DICT, KEPT_LABELS
+from tool_func import read_pcd, read_json_file
 __all__ = ['SemanticKITTI']
 
 label_name_mapping = {
@@ -252,32 +254,46 @@ class SemanticPOSSInternal:
         else:
             trainval = False
         self.root = root
+        self.lidarcap_root = '/hdd/dyd/lidarcap'
         self.split = split
         self.voxel_size = voxel_size
         self.num_points = num_points
         self.sample_stride = sample_stride
         self.google_mode = google_mode
         self.seqs = []
+        self.rot_mat = {}
         if split == 'train':
             self.seqs = [
-                '00', '01', '02', '03', '04'
+                '00', '01', '02', '03', '04', '6', '25'
             ]
             if self.google_mode or trainval:
                 self.seqs.append('05')
         elif self.split == 'val':
-            self.seqs = ['05']
+            self.seqs = ['05', '26']
         elif self.split == 'test':
-            self.seqs = ['05']
+            self.seqs = ['05', '26']
 
         self.files = []
         for seq in self.seqs:
-            seq_files = sorted(
-                os.listdir(os.path.join(self.root, seq, 'velodyne')))
-            seq_files = [
-                os.path.join(self.root, seq, 'velodyne', x) for x in seq_files
-            ]
-            self.files.extend(seq_files)
+            pc_dir = os.path.join(self.root, seq, 'velodyne')
+            if os.path.exists(pc_dir):
+                seq_files = sorted(os.listdir(pc_dir))
+                seq_files = [os.path.join(pc_dir, x) for x in seq_files]
+                self.files.extend(seq_files)
 
+        # Load lidarcap data
+        for seq in self.seqs:
+            pc_dir = os.path.join(self.lidarcap_root, 'velodyne', seq)
+            if os.path.exists(pc_dir):
+                seq_files = sorted(os.listdir(pc_dir))
+                seq_files_ = []
+                for x in seq_files:
+                    label_file = os.path.join(pc_dir, x).replace(
+                        'velodyne', 'labels').split('.')[0] + '.label'
+                    if os.path.exists(label_file):
+                        seq_files_.append(os.path.join(pc_dir, x))  # 只有当label文件存在时，我们才使用该文件
+                self.files.extend(seq_files_)
+            
         if self.sample_stride > 1:
             self.files = self.files[::self.sample_stride]
 
@@ -291,7 +307,7 @@ class SemanticPOSSInternal:
                 reverse_label_name_mapping['unlabeled'] = 0
             elif label_id == 4 or label_id == 5:
                 self.label_map[label_id] = 1
-                reverse_label_name_mapping['pedestrian'] = 1
+                reverse_label_name_mapping['person'] = 1
                 cnt = 2
             elif LABEL_DICT[label_id] in KEPT_LABELS:
                 self.label_map[label_id] = cnt
@@ -305,6 +321,11 @@ class SemanticPOSSInternal:
         self.num_classes = cnt
         self.angle = 0.0
 
+        # load_rot_matrix()
+        rots = read_json_file(os.path.join(self.lidarcap_root, 'make_horizon.json'))
+        for key in rots.keys():
+            self.rot_mat[key] = np.asarray(rots[key])
+
     def set_angle(self, angle):
         self.angle = angle
 
@@ -312,24 +333,32 @@ class SemanticPOSSInternal:
         return len(self.files)
 
     def __getitem__(self, index):
-        with open(self.files[index], 'rb') as b:
-            block_ = np.fromfile(b, dtype=np.float32).reshape(-1, 4)    #x,y,z,intensity
+        if self.files[index].endswith('.pcd'):
+            block_ = read_pcd(self.files[index]).astype(np.float32)
+        else:
+            with open(self.files[index], 'rb') as b:
+                block_ = np.fromfile(b, dtype=np.float32).reshape(-1, 4)    #x,y,z,intensity
         block = np.zeros_like(block_)
+
+        # 掰平地面的矩阵，仅适用于 LiDARCap
+        key = os.path.basename(os.path.dirname(self.files[index]))
+        if key in self.rot_mat.keys():
+            make_horizon = self.rot_mat[key]
+            block_[:, :3] = block_[:, :3] @ make_horizon.T 
 
         if 'train' in self.split:
             theta = np.random.uniform(0, 2 * np.pi)
             scale_factor = np.random.uniform(0.95, 1.05)
             rot_mat = np.array([[np.cos(theta), np.sin(theta), 0],
-                                [-np.sin(theta),
-                                 np.cos(theta), 0], [0, 0, 1]])
+                                [-np.sin(theta),np.cos(theta), 0], 
+                                [0, 0, 1]])
 
             block[:, :3] = np.dot(block_[:, :3], rot_mat) * scale_factor
         else:
             theta = self.angle
-            transform_mat = np.array([[np.cos(theta),
-                                       np.sin(theta), 0],
-                                      [-np.sin(theta),
-                                       np.cos(theta), 0], [0, 0, 1]])
+            transform_mat = np.array([[np.cos(theta), np.sin(theta), 0],
+                                      [-np.sin(theta),np.cos(theta), 0], 
+                                      [0, 0, 1]])
             block[...] = block_[...]
             block[:, :3] = np.dot(block[:, :3], transform_mat)
 
@@ -338,7 +367,7 @@ class SemanticPOSSInternal:
         pc_ -= pc_.min(0, keepdims=1)
 
         label_file = self.files[index].replace(
-            'velodyne', 'labels').replace('.bin', '.label')
+            'velodyne', 'labels').split('.')[0] + '.label'
         if os.path.exists(label_file):
             with open(label_file, 'rb') as a:
                 all_labels = np.fromfile(a, dtype=np.uint32).reshape(-1)

@@ -6,7 +6,7 @@ W = 1800 # width of range image
 H = 40   # height of range image
 LABEL_DICT = {
     0: "unlabeled",
-    4: "1 person",
+    4: "person",
     5: "2+ person",
     6: "rider",
     7: "car",
@@ -24,16 +24,20 @@ LABEL_DICT = {
     22: "ground"} # class definition
 
 KEPT_LABELS = [
-    'pedestrian'
-    , 'rider'
+    "unlabeled",
+    'person'
+    # , 'rider'
     # , 'trunk'
-    , 'car', 'bike'
-    , 'plants', 'ground'
+    # , 'car', 'bike'
+    # , 'plants', 
+    # 'building',
+    # 'ground'
 ]
 
+        
 SEM_COLOR = np.array([
-    [0, 0, 0],                       # 0: "unlabeled"
-    [255, 30, 30], [0, 0, 0], [0, 0, 0], # don't care
+    [128, 128, 128],                       # 0: "unlabeled"
+    [0, 0, 0], [0, 0, 0], [0, 0, 0], # don't care
     [255, 30, 30],                   # 4: "1 person"
     [255, 30, 30],                   # 5: "2+ person"
     [255, 40, 200],                  # 6: "rider"
@@ -50,8 +54,14 @@ SEM_COLOR = np.array([
     [255, 120, 50],                  # 17: "fence"
     [0,0,0],[0,0,0],[0,0,0],         # don't care
     [100, 230, 245],                 # 21: "bike"
-    [128, 128, 128]],                # 22: "ground"
+    [30, 255, 30]],                # 22: "ground"
     dtype = np.uint8) # color definition
+
+keys = []
+for lb in KEPT_LABELS:
+    if lb in LABEL_DICT.values():
+        keys.append(list(LABEL_DICT.keys())[list(LABEL_DICT.values()).index(lb)])
+SEM_COLOR = SEM_COLOR[keys]
 
 def read_points(bin_file):
     points = np.fromfile(bin_file, dtype = np.float32)

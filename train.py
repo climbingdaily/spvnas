@@ -22,6 +22,7 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument('config', metavar='FILE', help='config file')
     parser.add_argument('--run-dir', metavar='DIR', help='run directory')
+    parser.add_argument('--model-init', default=None, metavar='FILE', help='model location')
     args, opts = parser.parse_known_args()
 
     configs.load(args.config, recursive=True)
@@ -75,7 +76,7 @@ def main() -> None:
             for i in range(configs.data.num_classes):
                 sample_classes[i] += torch.sum(feed_dict['targets'].F == i).item()
 
-    model = builder.make_model().cuda()
+    model = builder.make_model(args.model_init).cuda()
     # model.load_state_dict()
     if configs.distributed:
         model = torch.nn.parallel.DistributedDataParallel(
