@@ -264,14 +264,14 @@ class SemanticPOSSInternal:
         self.rot_mat = {}
         if split == 'train':
             self.seqs = [
-                '00', '01', '02', '03', '04', '6', '25'
+                '00', '01', '02', '03', '04', 'crop_6', 'crop_25'
             ]
             if self.google_mode or trainval:
                 self.seqs.append('05')
         elif self.split == 'val':
-            self.seqs = ['05', '26']
+            self.seqs = ['05', 'crop_26']
         elif self.split == 'test':
-            self.seqs = ['05', '26']
+            self.seqs = ['05', 'crop_26']
 
         self.files = []
         for seq in self.seqs:
@@ -282,6 +282,7 @@ class SemanticPOSSInternal:
                 self.files.extend(seq_files)
 
         # Load lidarcap data
+        # =================================================================
         for seq in self.seqs:
             pc_dir = os.path.join(self.lidarcap_root, 'velodyne', seq)
             if os.path.exists(pc_dir):
@@ -291,8 +292,10 @@ class SemanticPOSSInternal:
                     label_file = os.path.join(pc_dir, x).replace(
                         'velodyne', 'labels').split('.')[0] + '.label'
                     if os.path.exists(label_file):
-                        seq_files_.append(os.path.join(pc_dir, x))  # 只有当label文件存在时，我们才使用该文件
+                        # 只有当label文件存在时，我们才使用该文件
+                        seq_files_.append(os.path.join(pc_dir, x))
                 self.files.extend(seq_files_)
+        # =================================================================
             
         if self.sample_stride > 1:
             self.files = self.files[::self.sample_stride]
@@ -321,10 +324,13 @@ class SemanticPOSSInternal:
         self.num_classes = cnt
         self.angle = 0.0
 
-        # load_rot_matrix()
-        rots = read_json_file(os.path.join(self.lidarcap_root, 'make_horizon.json'))
+        # =================================================================
+        # load rotation matrix to make the frame horizontal [not necessary]
+        rots = read_json_file(os.path.join(
+            self.lidarcap_root, 'make_horizon.json'))
         for key in rots.keys():
             self.rot_mat[key] = np.asarray(rots[key])
+        # =================================================================
 
     def set_angle(self, angle):
         self.angle = angle
@@ -340,11 +346,13 @@ class SemanticPOSSInternal:
                 block_ = np.fromfile(b, dtype=np.float32).reshape(-1, 4)    #x,y,z,intensity
         block = np.zeros_like(block_)
 
+        # =================================================================
         # 掰平地面的矩阵，仅适用于 LiDARCap
         key = os.path.basename(os.path.dirname(self.files[index]))
         if key in self.rot_mat.keys():
             make_horizon = self.rot_mat[key]
             block_[:, :3] = block_[:, :3] @ make_horizon.T 
+        # =================================================================
 
         if 'train' in self.split:
             theta = np.random.uniform(0, 2 * np.pi)

@@ -167,10 +167,11 @@ def read_pcd(pcd_path):
     return pc
 
 def make_lidarcap_label(folder):
-    """[make semantic labels for pcd files in the [folder]]
-
+    """ 
+    给LiDARCap数据集制作semantic-kitti式的label
+    make semantic labels for pcd files in the @folder
     Args:
-        folder ([str]): A folder that contains pcd files
+        folder (str): A folder that contains pcd files
     """    
     if not os.path.exists(folder):
         print ("Folder does not exist")
@@ -205,8 +206,8 @@ def make_lidarcap_label(folder):
 
 
 def save_pcd(folder):
-    """[save pcd file based on the label files]
-
+    """ 
+    save pcd file based on the label files
     Args:
         folder ([str]): [description]
     """    
@@ -217,7 +218,7 @@ def save_pcd(folder):
     for i, filename in enumerate(point_clouds):
         pc_file = os.path.join(folder, filename)
 
-        label_file = pc_file.replace('velodyne', 'labels/segment').split('.')[0] + '.label'
+        label_file = pc_file.replace('velodyne', 'labels').split('.')[0] + '.label'
         if not os.path.exists(label_file):
             continue
 
@@ -225,23 +226,98 @@ def save_pcd(folder):
         all_labels = label_map[np.fromfile(
             label_file, dtype=np.uint32).reshape(-1) & 0xFFFF].astype(np.int64) # semantic labels
 
-        pc.colors = o3d.utility.Vector3dVector(SEM_COLOR[all_labels]/255)
-        out_folder = os.path.join(os.path.dirname(folder), 'gt_semantic_' + os.path.basename(folder))
+        pc.colors = o3d.utility.Vector3dVector(SEM_COLOR[all_labels] / 255)
+        out_folder = os.path.join(os.path.dirname(
+            folder), 'gt_semantic_' + os.path.basename(folder))
         os.makedirs(out_folder, exist_ok=True)
         o3d.io.write_point_cloud(os.path.join(out_folder, filename), pc)
         print(
-            f'\rFile saved in {os.path.join(out_folder, filename)}. Processed {i:d}/{len(point_clouds)}', end='\r', flush=True)
+            f'\rFile saved in {os.path.join(out_folder, filename)}. \
+                Processed {i:d}/{len(point_clouds)}', end='\r', flush=True)
+
+def crop_lidarcap(lidarcap_root, seqs = ['6', '25', '26']):
+    """根据make horizon旋转矩阵和bounding box, 切割lidarcap点云
+    Args:
+        lidarcap_root ([str]): [description]
+        seqs ([list]): [data folder list]
+    """    
+    from pypcd import pypcd
+    # load rotation matrix to make the frame horizontal 
+    rot_mat = {}
+    rots = read_json_file(os.path.join(
+        lidarcap_root, 'make_horizon.json'))
+    for key in rots.keys():
+        rot_mat[key] = np.asarray(rots[key])
+
+    # load bounding boxes to crop the frame
+    boxes = {}
+    boxes_ = read_json_file(os.path.join(
+        lidarcap_root, 'bounding_box.json'))
+    for key in boxes_.keys():
+        boxes[key] = np.asarray(boxes_[key])
+
+    # Load lidarcap data
+    # =================================================================
+    for seq in seqs:
+        pc_dir = os.path.join(lidarcap_root, 'velodyne', seq)
+        crop_pc_dir = os.path.join(lidarcap_root, 'velodyne', 'crop_' + seq)
+        label_dir = os.path.join(lidarcap_root, 'labels', seq)
+        crop_label_dir = os.path.join(lidarcap_root, 'labels', 'crop_' + seq)
+
+        if not os.path.exists(pc_dir):
+            continue
+        os.makedirs(crop_pc_dir, exist_ok=True)
+        os.makedirs(crop_label_dir, exist_ok=True)
+        for ii, x in enumerate(sorted(os.listdir(pc_dir))):
+            if not x.endswith('.pcd'):
+                continue
+            
+            block = read_pcd(os.path.join(pc_dir, x)).astype(np.float32)
+            
+            # 掰平地面的矩阵
+            if seq in rot_mat.keys():
+                make_horizon = rot_mat[key]
+                block[:, :3] = block[:, :3] @ make_horizon.T 
+
+            if seq not in boxes.keys():
+                continue
+
+            center = np.array(boxes[seq][0]['center'])
+            length = np.array(boxes[seq][0]['length'])
+            min_bound = center - length/2
+            max_bound = center + length/2
+            box = o3d.geometry.AxisAlignedBoundingBox(min_bound, max_bound)
+            
+            # 根据bounding box切割点云
+            crop_inds = box.get_point_indices_within_bounding_box(
+                o3d.utility.Vector3dVector(block[:, :3]))
+
+
+            # save pcd
+            croped = pypcd.make_xyz_label_point_cloud(block[crop_inds], label='intensity')
+            pypcd.save_point_cloud_bin(croped, os.path.join(crop_pc_dir, x))
+            
+            # load label and save cropped label
+            label_file = os.path.join(label_dir, x.split('.')[0] + '.label')
+            crop_label_file = os.path.join(crop_label_dir, x.split('.')[0] + '.label')
+            if os.path.exists(label_file):
+                label = np.fromfile(
+                    label_file, dtype=np.uint32).reshape(-1) & 0xFFFF
+                label[crop_inds].tofile(crop_label_file)
+            
+            print(
+                f'\rFile saved in {os.path.join(crop_pc_dir, x)} ({ii:d}/{len(os.listdir(pc_dir))})', end='\r', flush=True)
 
 if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser()
-    # parser.add_argument('config', metavar='FILE', help='config file')
+    lidarcap_root = '/hdd/dyd/lidarcap'
     parser.add_argument('--run-dir', metavar='DIR', help='run directory')
     # parser.add_argument('--velodyne-dir', type=str, default='/hdd/dyd/SemanticPOSS/sequences/05/velodyne')
-    parser.add_argument('--velodyne-dir', type=str, default='/hdd/dyd/lidarcap/velodyne/6')
-    parser.add_argument('--model', type=str, default='SemanticKITTI_val_SPVCNN@65GMACs')
-    # args = parser.parse_args()
+    parser.add_argument('--velodyne-dir', type=str, default='/hdd/dyd/lidarcap/velodyne')
     args, opts = parser.parse_known_args()
     # for pp in sorted(os.listdir(args.velodyne_dir)):
-    make_lidarcap_label(os.path.join(args.velodyne_dir))
+    # make_lidarcap_label(os.path.join(args.velodyne_dir))
     # save_pcd(args.velodyne_dir)
+
+    crop_lidarcap(lidarcap_root)

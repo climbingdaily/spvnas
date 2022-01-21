@@ -129,8 +129,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('config', metavar='FILE', help='config file')
     parser.add_argument('--run-dir', metavar='DIR', help='run directory')
-    parser.add_argument('--velodyne-dir', type=str, default='/hdd/dyd/SemanticPOSS/sequences/05/velodyne')
-    # parser.add_argument('--velodyne-dir', type=str, default='/hdd/dyd/lidarcap/velodyne/6')
+    # parser.add_argument('--velodyne-dir', type=str, default='/hdd/dyd/SemanticPOSS/sequences/05/velodyne')
+    parser.add_argument('--velodyne-dir', type=str, default='/hdd/dyd/lidarcap/velodyne/6')
     parser.add_argument('--model', type=str, default='SemanticKITTI_val_SPVCNN@65GMACs')
     # args = parser.parse_args()
     args, opts = parser.parse_known_args()
@@ -185,9 +185,9 @@ if __name__ == '__main__':
             
             make_horizon = read_json_file(args.velodyne_dir.split('velodyne')[
                                           0] + '/make_horizon.json')
-            make_horizon = np.asarray(make_horizon[os.path.basename(args.velodyne_dir)])
-
-            pc[:, :3] = pc[:, :3] @ make_horizon.T
+            key = os.path.basename(args.velodyne_dir)
+            if key in make_horizon.keys():
+                pc[:, :3] = pc[:, :3] @ np.asarray(make_horizon[key]).T
             label_file_name = None
             out_file_name = os.path.join(output_dir, point_cloud_name)
         else:
@@ -200,4 +200,4 @@ if __name__ == '__main__':
         output.points = o3d.utility.Vector3dVector(feed_dict['pc'][:,:3])
         output.colors = o3d.utility.Vector3dVector(SEM_COLOR[predictions]/255)
         o3d.io.write_point_cloud(out_file_name, output)
-        print(f'\rFile save in {out_file_name}. Processed {i:d}/{files_num}', end='\r',flush=True)
+        print(f'\rFile save in {out_file_name} ({i:d}/{files_num})', end='\r',flush=True)
