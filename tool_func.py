@@ -320,4 +320,4 @@ if __name__ == '__main__':
     # make_lidarcap_label(os.path.join(args.velodyne_dir))
     # save_pcd(args.velodyne_dir)
 
-    crop_lidarcap(lidarcap_root)
+    crop_lidarcap(lidarcap_root, seqs = ['25', '26'])
